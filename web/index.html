@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiosk</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171b22; --panel-2: #1f2530; --line: #2b3340;
+    --text: #eef1f6; --muted: #8b95a5; --accent: #2f7cf6; --accent-2: #1d5fd0;
+    --ok: #2fbf71; --err: #f05252; --r: 14px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column; overflow: hidden; user-select: none;
+    background: var(--bg); color: var(--text);
+    font: 20px/1.4 system-ui, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  }
+  header { display: flex; align-items: center; gap: 16px; min-height: 84px; padding: 14px 32px; border-bottom: 1px solid var(--line); }
+  #back { padding: 9px 20px; }
+  h1 { flex: 1; min-width: 0; margin: 0; font-size: 30px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  main { flex: 1; overflow-y: auto; padding: 28px 32px 48px; }
+
+  .screen { display: none; max-width: 1400px; margin: 0 auto; }
+  .screen.active { display: block; }
+  .screen.center.active { display: grid; place-items: center; align-content: center; gap: 22px; min-height: 55vh; text-align: center; }
+
+  .pill { padding: 6px 14px; border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 16px; white-space: nowrap; }
+  .pill::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: var(--muted); vertical-align: 1px; }
+  .pill.on::before { background: var(--ok); }
+  .pill.off::before { background: var(--err); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .grid.big { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .grid + .grid { margin-top: 14px; }
+  .tile {
+    display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 96px; padding: 18px 22px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r);
+    font: inherit; text-align: left; cursor: pointer;
+  }
+  .grid.big .tile { min-height: 140px; }
+  .grid.big .tile .t { font-size: 26px; }
+  .tile:hover, .tile:focus-visible { background: var(--panel-2); border-color: var(--accent); outline: none; }
+  .tile .t { font-weight: 600; }
+  .tile .s { color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
+  .tile.accent { background: var(--accent-2); border-color: var(--accent); }
+  .tile.accent .s { color: #d6e4ff; }
+  .tile.ghost { background: transparent; border-style: dashed; }
+
+  .label { margin: 30px 0 12px; color: var(--muted); font-size: 15px; letter-spacing: .06em; text-transform: uppercase; }
+  .label:first-child { margin-top: 0; }
+  input:not([type=checkbox]) {
+    width: 100%; padding: 14px 18px; font: inherit; font-size: 22px; outline: none;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r);
+  }
+  input:focus { border-color: var(--accent); }
+  .btn { padding: 14px 26px; font: inherit; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; white-space: nowrap; }
+  .btn:hover, .btn:focus-visible { border-color: var(--accent); outline: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 12px; }
+  .row > input { flex: 1; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+  #quit { margin-left: auto; }
+  .center .toolbar { justify-content: center; margin-top: 10px; }
+  .network-name { font-size: 46px; font-weight: 700; overflow-wrap: anywhere; }
+  .preview { min-height: 1.4em; margin-top: 10px; color: var(--muted); font-size: 17px; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); }
+  .err { color: var(--err); }
+  .ok { color: var(--ok); }
+  #page-filter { margin-bottom: 18px; }
+
+  .spinner { width: 54px; height: 54px; border: 5px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .nets { display: grid; gap: 10px; max-width: 760px; }
+  .net {
+    display: flex; align-items: center; gap: 18px; padding: 18px 22px; font: inherit; text-align: left; cursor: pointer;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r);
+  }
+  .net:hover, .net:focus-visible { background: var(--panel-2); border-color: var(--accent); outline: none; }
+  .net.active { border-color: var(--ok); }
+  .net .name { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+  .net .meta { color: var(--muted); font-size: 16px; }
+  .bars { display: inline-flex; align-items: flex-end; gap: 3px; height: 22px; }
+  .bars i { width: 6px; border-radius: 1px; background: var(--line); }
+  .bars i:nth-child(1) { height: 25%; } .bars i:nth-child(2) { height: 50%; }
+  .bars i:nth-child(3) { height: 75%; } .bars i:nth-child(4) { height: 100%; }
+  .bars i.on { background: var(--text); }
+
+  dialog { width: min(620px, 92vw); padding: 30px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 18px; }
+  dialog::backdrop { background: rgba(0, 0, 0, .65); }
+  dialog h2 { margin: 0 0 18px; font-size: 26px; overflow-wrap: anywhere; }
+  dialog .field { display: block; margin-bottom: 16px; }
+  dialog input[type=checkbox] { width: 20px; height: 20px; margin: 0 8px 0 0; vertical-align: -3px; }
+  dialog .field span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 16px; }
+  dialog .toolbar { justify-content: flex-end; margin-top: 10px; }
+  #wifi-msg { min-height: 1.4em; margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <button id="back" class="btn" type="button" hidden>‹ Tilbage</button>
+  <h1 id="title">Starter…</h1>
+  <span id="status" class="pill">Tjekker…</span>
+</header>
+
+<main>
+  <section id="check" class="screen center">
+    <div class="spinner"></div>
+    <div>Tjekker internetforbindelse…</div>
+    <button id="skip-wait" class="btn" type="button">Vælg Wi-Fi nu</button>
+  </section>
+
+  <section id="confirm" class="screen center">
+    <div class="muted">Forbundet til</div>
+    <div id="confirm-network" class="network-name"></div>
+    <div>Er det det rigtige netværk?</div>
+    <div class="toolbar">
+      <button id="confirm-no" class="btn" type="button">Nej, vælg et andet</button>
+      <button id="confirm-yes" class="btn primary" type="button">Ja, fortsæt</button>
+    </div>
+  </section>
+
+  <section id="error" class="screen center">
+    <div id="error-msg" class="err"></div>
+    <button class="btn primary" type="button" onclick="start()">Prøv igen</button>
+  </section>
+
+  <section id="wifi" class="screen">
+    <p id="wifi-intro" class="label"></p>
+    <div id="wifi-list" class="nets"></div>
+    <p id="wifi-note"></p>
+    <div class="toolbar">
+      <button id="wifi-rescan" class="btn" type="button">Søg igen</button>
+      <button id="wifi-hidden" class="btn" type="button">Skjult netværk…</button>
+      <button id="wifi-continue" class="btn primary" type="button">Fortsæt uden internet ›</button>
+    </div>
+  </section>
+
+  <section id="sites" class="screen">
+    <div id="last" class="grid big"></div>
+    <div id="site-list" class="grid big"></div>
+    <div class="toolbar">
+      <button id="wifi-open" class="btn" type="button">Wi-Fi…</button>
+      <button id="quit" class="btn" type="button">Afslut kiosk</button>
+    </div>
+  </section>
+
+  <section id="pages" class="screen">
+    <input id="page-filter" type="search" placeholder="Søg efter side…" autocomplete="off">
+    <div id="page-list" class="grid"></div>
+  </section>
+
+  <section id="address" class="screen">
+    <p class="label">Normal adresse</p>
+    <div id="address-default" class="grid big"></div>
+    <p id="address-recent-label" class="label">Brugt før</p>
+    <div id="address-recent" class="grid"></div>
+    <p class="label">Anden adresse</p>
+    <form id="address-form" class="row" autocomplete="off">
+      <input id="address-input" type="text" placeholder="f.eks. 192.168.1.20:8000 eller localhost:5000" spellcheck="false">
+      <button class="btn primary" type="submit">Åbn</button>
+    </form>
+    <div id="address-preview" class="preview"></div>
+  </section>
+
+  <section id="custom" class="screen">
+    <p class="label">Skriv en adresse</p>
+    <form id="custom-form" class="row" autocomplete="off">
+      <input id="custom-input" type="text" placeholder="f.eks. example.com/side eller 192.168.1.20" spellcheck="false">
+      <button class="btn primary" type="submit">Åbn</button>
+    </form>
+    <div id="custom-preview" class="preview"></div>
+  </section>
+
+  <section id="opening" class="screen center">
+    <div class="spinner"></div>
+    <div id="opening-url" class="muted"></div>
+  </section>
+
+  <section id="stopped" class="screen center">
+    <div>Kiosken er stoppet.</div>
+    <div class="muted">Start den igen fra programmenuen ("Kiosk") eller genstart.</div>
+  </section>
+</main>
+
+<dialog id="wifi-dialog">
+  <form id="wifi-form" method="dialog" autocomplete="off">
+    <h2 id="wifi-form-title"></h2>
+    <label id="wifi-ssid-row" class="field"><span>Netværksnavn (SSID)</span><input id="wifi-ssid" type="text" spellcheck="false"></label>
+    <label id="wifi-pass-row" class="field"><span>Adgangskode</span><input id="wifi-pass" type="password"></label>
+    <label id="wifi-show-row" class="field muted"><input id="wifi-show" type="checkbox"> Vis adgangskode</label>
+    <p id="wifi-msg"></p>
+    <div class="toolbar">
+      <button id="wifi-cancel" class="btn" type="button">Annuller</button>
+      <button id="wifi-connect" class="btn primary" type="submit">Forbind</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+// After power-on, give Wi-Fi this long to come up on its own before asking.
+const BOOT_WAIT_MS = 25000;
+const QUICK_WAIT_MS = 3000;
+
+const $ = (sel) => document.querySelector(sel);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function el(tag, props = {}, ...children) {
+  const e = Object.assign(document.createElement(tag), props);
+  e.append(...children);
+  return e;
+}
+
+let config = { title: '', sites: [] };
+let state = {};
+let lastStatus = { online: false, network: null, uptime: null, confirmed: false };
+let stack = [];          // render functions; the last one is on screen
+let current = '';        // id of the visible screen
+let wifiAuto = false;    // leave the Wi-Fi screen by itself once we're online
+let skipWait = false;
+let connecting = false;
+
+async function api(path, body) {
+  const opts = body === undefined ? {} :
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// --- Navigation -------------------------------------------------------------
+
+function screen(id, title) {
+  current = id;
+  document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
+  $('#title').textContent = title;
+  $('main').scrollTop = 0;
+  $('#back').hidden = stack.length < 2 || ['check', 'opening', 'error', 'stopped'].includes(id);
+}
+function go(render) { stack.push(render); render(); }
+function reset(render) { stack = [render]; render(); }
+function back() {
+  if (stack.length < 2) return;
+  stack.pop();
+  stack[stack.length - 1]();
+}
+function fail(msg) {
+  stack = [];
+  screen('error', 'Fejl');
+  $('#error-msg').textContent = msg;
+}
+
+// --- URLs -------------------------------------------------------------------
+
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+// "192.168.1.20:8000" -> "http://192.168.1.20:8000", "example.com" -> "https://example.com"
+function normalize(raw, stripSlash) {
+  let s = raw.trim();
+  if (stripSlash) s = s.replace(/\/+$/, '');
+  if (!s) return '';
+  if (!HAS_SCHEME.test(s)) {
+    const host = s.split(/[/:?#]/)[0].toLowerCase();
+    const local = host === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) ||
+      host.endsWith('.local') || !host.includes('.');
+    s = (local ? 'http://' : 'https://') + s;
+  }
+  return s;
+}
+function join(base, path) {
+  if (HAS_SCHEME.test(path || '')) return path;
+  path = path || '/';
+  return base.replace(/\/+$/, '') + (path.startsWith('/') ? path : '/' + path);
+}
+function hostOf(url) {
+  try { return new URL(url).host; } catch { return url; }
+}
+
+async function openUrl(url, label, extra = {}) {
+  screen('opening', 'Åbner…');
+  $('#opening-url').textContent = url;
+  try { state = await api('/api/state', { last: { url, label }, ...extra }); } catch {}
+  location.href = url;
+}
+
+// --- Start / internet check -------------------------------------------------
+
+async function refreshStatus() {
+  let st = { online: false, network: null, uptime: null, confirmed: false };
+  try { st = await api('/api/status'); } catch {}
+  const pill = $('#status');
+  pill.className = 'pill ' + (st.online ? 'on' : 'off');
+  pill.textContent = (st.online ? 'Online' : 'Intet internet') + (st.network ? ` · ${st.network}` : '');
+  lastStatus = st;
+  return st;
+}
+
+// Asked once per kiosk start (and again if the network changes): are we on the right Wi-Fi?
+function renderConfirm() {
+  screen('confirm', 'Wi-Fi');
+  const network = lastStatus.network;
+  $('#confirm-network').textContent = network === 'Kabel' ? 'Netværkskabel' : network || 'Ukendt netværk';
+  $('#confirm-yes').onclick = () => confirmNetwork(network);
+  $('#confirm-yes').focus();
+}
+
+async function confirmNetwork(network) {
+  try { await api('/api/wifi/confirm', { network }); } catch {}
+  reset(renderSites);
+}
+
+async function start() {
+  skipWait = false;
+  reset(() => screen('check', 'Starter…'));
+  try {
+    [config, state] = await Promise.all([api('/api/config'), api('/api/state')]);
+  } catch (e) {
+    return fail(e.message);
+  }
+  document.title = config.title;
+
+  let st = await refreshStatus();
+  const until = Date.now() + (st.uptime !== null && st.uptime < 120 ? BOOT_WAIT_MS : QUICK_WAIT_MS);
+  while (!st.online && !skipWait && Date.now() < until) {
+    await sleep(2000);
+    st = await refreshStatus();
+  }
+  if (st.online && !skipWait) {
+    reset(st.confirmed ? renderSites : renderConfirm);
+  } else {
+    wifiAuto = !st.online;
+    reset(renderWifi);
+  }
+}
+
+async function poll() {
+  const st = await refreshStatus();
+  if (st.online && current === 'wifi' && wifiAuto && !connecting && !$('#wifi-dialog').open) {
+    reset(st.confirmed ? renderSites : renderConfirm);  // Wi-Fi came up by itself: still ask
+  }
+  setTimeout(poll, 5000);
+}
+
+// --- Wi-Fi ------------------------------------------------------------------
+
+function renderWifi() {
+  screen('wifi', 'Wi-Fi');
+  $('#wifi-intro').textContent = wifiAuto ? 'Ingen internetforbindelse – vælg et netværk' : 'Vælg et netværk';
+  $('#wifi-note').textContent = '';
+  scan();
+}
+
+async function scan() {
+  const list = $('#wifi-list');
+  list.replaceChildren(el('p', { className: 'muted', textContent: 'Søger efter netværk…' }));
+  try {
+    const { networks } = await api('/api/wifi/scan');
+    list.replaceChildren(...networks.map(netRow));
+    if (!networks.length) list.append(el('p', { className: 'muted', textContent: 'Ingen netværk fundet.' }));
+  } catch (e) {
+    list.replaceChildren(el('p', { className: 'err', textContent: e.message }));
+  }
+}
+
+function netRow(n) {
+  const bars = el('span', { className: 'bars' });
+  for (let i = 1; i <= 4; i++) bars.append(el('i', { className: n.signal >= i * 25 - 10 ? 'on' : '' }));
+  const meta = (n.active ? 'Forbundet · ' : '') + (n.secure ? 'Adgangskode' : 'Åbent');
+  return el('button', {
+    type: 'button',
+    className: 'net' + (n.active ? ' active' : ''),
+    onclick: () => openWifiDialog(n.ssid, n.secure, false),
+  }, bars, el('span', { className: 'name', textContent: n.ssid }), el('span', { className: 'meta', textContent: meta }));
+}
+
+function openWifiDialog(ssid, secure, hidden) {
+  const dialog = $('#wifi-dialog');
+  dialog.dataset.hidden = hidden ? '1' : '';
+  $('#wifi-form-title').textContent = hidden ? 'Skjult netværk' : ssid;
+  $('#wifi-ssid-row').hidden = !hidden;
+  $('#wifi-ssid').value = hidden ? '' : ssid;
+  $('#wifi-pass-row').hidden = $('#wifi-show-row').hidden = !secure;
+  $('#wifi-pass').value = '';
+  $('#wifi-pass').type = 'password';
+  $('#wifi-show').checked = false;
+  setWifiMsg('');
+  dialog.showModal();
+  (hidden ? $('#wifi-ssid') : secure ? $('#wifi-pass') : $('#wifi-connect')).focus();
+}
+
+function setWifiMsg(text, cls = 'muted') {
+  $('#wifi-msg').className = cls;
+  $('#wifi-msg').textContent = text;
+}
+
+async function connectWifi(e) {
+  e.preventDefault();
+  const dialog = $('#wifi-dialog');
+  const ssid = $('#wifi-ssid').value.trim();
+  if (!ssid || connecting) return;
+  connecting = true;
+  $('#wifi-connect').disabled = $('#wifi-cancel').disabled = true;
+  setWifiMsg(`Forbinder til ${ssid}…`);
+  try {
+    await api('/api/wifi/connect', { ssid, password: $('#wifi-pass').value, hidden: !!dialog.dataset.hidden });
+    setWifiMsg('Forbundet – tjekker internet…', 'ok');
+    let st;
+    for (let i = 0; i < 8; i++) {
+      st = await refreshStatus();
+      if (st.online) break;
+      await sleep(1500);
+    }
+    dialog.close();
+    if (st.online) {
+      confirmNetwork(st.network || ssid);  // picked by hand, so already confirmed
+    } else {
+      $('#wifi-note').className = 'muted';
+      $('#wifi-note').textContent = `Forbundet til ${ssid}, men der er intet internet. Lokale adresser virker stadig – tryk "Fortsæt".`;
+      scan();
+    }
+  } catch (err) {
+    setWifiMsg(err.message, 'err');
+  } finally {
+    connecting = false;
+    $('#wifi-connect').disabled = $('#wifi-cancel').disabled = false;
+  }
+}
+
+// --- Sites, pages, address --------------------------------------------------
+
+function tile(title, sub, onclick, extra = '') {
+  const b = el('button', { type: 'button', className: 'tile ' + extra, onclick }, el('span', { className: 't', textContent: title }));
+  if (sub) b.append(el('span', { className: 's', textContent: sub }));
+  return b;
+}
+
+function renderSites() {
+  screen('sites', config.title);
+  const last = state.last;
+  $('#last').replaceChildren(...(last && last.url
+    ? [tile('Seneste: ' + last.label, last.url, () => openUrl(last.url, last.label), 'accent')]
+    : []));
+  $('#site-list').replaceChildren(
+    ...config.sites.map((site) => {
+      const t = tile(site.name, hostOf(site.url), () => {
+        if (site.pages.length) go(() => renderPages(site));
+        else choosePage(site, { name: site.name, path: '/' });
+      });
+      if (site.allow_other_address) t.append(el('span', { className: 's', textContent: `eller en anden ${site.name}-side` }));
+      return t;
+    }),
+    tile('Noget andet…', 'Skriv selv en adresse', () => go(renderCustom), 'ghost'),
+  );
+}
+
+function renderPages(site) {
+  screen('pages', site.name);
+  const filter = $('#page-filter');
+  filter.value = '';
+  filter.hidden = site.pages.length < 10;
+  const draw = () => {
+    const q = filter.value.trim().toLowerCase();
+    const hits = site.pages.filter((p) => !q || `${p.name} ${p.path}`.toLowerCase().includes(q));
+    $('#page-list').replaceChildren(...hits.map((p) => tile(p.name, p.path, () => choosePage(site, p))));
+    if (!hits.length) $('#page-list').append(el('p', { className: 'muted', textContent: 'Ingen sider matcher.' }));
+  };
+  filter.oninput = draw;
+  draw();
+}
+
+function choosePage(site, page) {
+  if (site.allow_other_address) go(() => renderAddress(site, page));
+  else openUrl(join(site.url, page.path), `${site.name} › ${page.name}`);
+}
+
+function renderAddress(site, page) {
+  screen('address', `${site.name} › ${page.name}`);
+  const openOther = (base) => openUrl(join(base, page.path), `${site.name} › ${page.name} (${hostOf(base)})`,
+    { host: { site: site.name, value: base } });
+
+  const normal = join(site.url, page.path);
+  $('#address-default').replaceChildren(tile(hostOf(site.url), normal, () => openUrl(normal, `${site.name} › ${page.name}`), 'accent'));
+
+  const recent = (state.hosts && state.hosts[site.name]) || [];
+  $('#address-recent-label').hidden = !recent.length;
+  $('#address-recent').replaceChildren(...recent.map((h) => tile(hostOf(h), join(h, page.path), () => openOther(h))));
+
+  const input = $('#address-input');
+  const preview = () => {
+    const base = normalize(input.value, true);
+    $('#address-preview').textContent = base ? '→ ' + join(base, page.path) : '';
+  };
+  input.value = '';
+  input.oninput = preview;
+  preview();
+  $('#address-form').onsubmit = (e) => {
+    e.preventDefault();
+    const base = normalize(input.value, true);
+    if (base) openOther(base);
+  };
+}
+
+function renderCustom() {
+  screen('custom', 'Noget andet');
+  const input = $('#custom-input');
+  input.value = '';
+  input.oninput = () => {
+    const url = normalize(input.value, false);
+    $('#custom-preview').textContent = url ? '→ ' + url : '';
+  };
+  input.oninput();
+  $('#custom-form').onsubmit = (e) => {
+    e.preventDefault();
+    const url = normalize(input.value, false);
+    if (url) openUrl(url, url);
+  };
+  input.focus();
+}
+
+async function quitKiosk() {
+  if (!confirm('Afslut kiosken og gå til skrivebordet?')) return;
+  stack = [];
+  screen('stopped', 'Kiosk');
+  try { await api('/api/quit', {}); } catch {}
+}
+
+// --- Wiring -----------------------------------------------------------------
+
+$('#back').onclick = back;
+$('#skip-wait').onclick = () => { skipWait = true; };
+$('#wifi-rescan').onclick = scan;
+$('#wifi-hidden').onclick = () => openWifiDialog('', true, true);
+$('#wifi-continue').onclick = () => confirmNetwork(lastStatus.network);
+$('#confirm-no').onclick = () => { wifiAuto = false; go(renderWifi); };
+$('#wifi-open').onclick = () => { wifiAuto = false; go(renderWifi); };
+$('#quit').onclick = quitKiosk;
+$('#wifi-cancel').onclick = () => $('#wifi-dialog').close();
+$('#wifi-show').onchange = (e) => { $('#wifi-pass').type = e.target.checked ? 'text' : 'password'; };
+$('#wifi-form').onsubmit = connectWifi;
+
+document.addEventListener('keydown', (e) => {
+  if ($('#wifi-dialog').open) return;  // Esc closes the dialog itself
+  const typing = e.target instanceof HTMLInputElement;
+  if (e.key === 'Escape' || (e.key === 'Backspace' && !typing)) {
+    if (typing && e.target.value) { e.target.value = ''; e.target.dispatchEvent(new Event('input')); }
+    else back();
+    e.preventDefault();
+  } else if (current === 'pages' && !typing && !$('#page-filter').hidden &&
+             e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    $('#page-filter').focus();  // type anywhere to search; the key lands in the field
+  }
+});
+
+// Coming back with Alt+← restores the page from cache; start over instead.
+window.addEventListener('pageshow', (e) => { if (e.persisted) start(); });
+
+start();
+setTimeout(poll, 5000);
+</script>
+</body>
+</html>

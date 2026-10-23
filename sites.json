@@ -1,0 +1,29 @@
+{
+  "title": "Vælg skærm",
+  "sites": [
+    {
+      "name": "OWLCMS",
+      "url": "https://owlcms.fss.fo",
+      "allow_other_address": true,
+      "pages": {
+        "Attempt Board": "/displays/attemptBoard?fop=A",
+        "Atlet-vendt timer": "/displays/athleteFacingDecision?fop=A",
+        "Scoreboard": "/displays/resultsSimple?records=true&fop=A&showMedals=auto",
+        "Scoreboard med leaderboard": "/displays/resultsLeaders?fop=A&currentAttempt=true",
+        "Rækkefølge": "/displays/resultsLiftingOrder?fop=A&leaders=false",
+        "Startliste": "/displays/publicStartList?fop=A&currentAttempt=true&public=false",
+        "Top Sinclair": "/displays/topsinclair?fop=A"
+      }
+    },
+    {
+      "name": "Powerlifting Live",
+      "url": "https://dk.powerlifting.live",
+      "pages": {
+        "Forside": "/",
+        "Live": "/live",
+        "Resultater": "/resultater",
+        "Storskærm": "/storskaerm"
+      }
+    }
+  ]
+}
