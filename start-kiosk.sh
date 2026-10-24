@@ -35,6 +35,19 @@ case "$BROWSER" in
   # Snap Chromium (Ubuntu) may not write to hidden folders in $HOME.
   /snap/*) PROFILE="$HOME/snap/chromium/common/kiosk-chromium" ;;
 esac
+EXTRA=()
+# Native Wayland (Raspberry Pi OS labwc): under XWayland the kiosk window may not cover the desktop.
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then EXTRA+=(--ozone-platform=wayland); fi
+
+# Right after boot the desktop is still coming up, and a Chromium window opened then can end up
+# hidden behind it. Wait for the taskbar and give the desktop a moment to settle.
+if [ "$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)" -lt 120 ]; then
+  for _ in $(seq 30); do
+    pgrep -x 'wf-panel-pi|lxpanel' >/dev/null && break
+    sleep 1
+  done
+  sleep 5
+fi
 
 while true; do
   # After a power cut Chromium would otherwise ask to restore the old pages.
@@ -43,8 +56,11 @@ while true; do
     sed -i 's/"exited_cleanly":false/"exited_cleanly":true/; s/"exit_type":"[^"]*"/"exit_type":"Normal"/' "$PREFS"
   fi
 
+  echo "$(date '+%F %T') Starter Chromium (${XDG_SESSION_TYPE:-?}, WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}, DISPLAY=${DISPLAY:-})" >>"$LOG"
   "$BROWSER" \
     --kiosk \
+    --start-maximized \
+    "${EXTRA[@]}" \
     --user-data-dir="$PROFILE" \
     --no-first-run \
     --noerrdialogs \
@@ -55,6 +71,6 @@ while true; do
     --overscroll-history-navigation=0 \
     --check-for-update-interval=31536000 \
     --autoplay-policy=no-user-gesture-required \
-    "http://127.0.0.1:$PORT/" >/dev/null 2>&1
+    "http://127.0.0.1:$PORT/" >>"$LOG" 2>&1
   sleep 1
 done

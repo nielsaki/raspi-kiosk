@@ -72,7 +72,9 @@ KIOSK_FAKE_WIFI=1 python3 launcher.py
 
 ## Fejlfinding
 
-- Log: `~/.local/state/kiosk/kiosk.log`
+- Log: `~/.local/state/kiosk/kiosk.log` (også Chromiums egne fejl)
+- Kun skrivebordet ses efter opstart: kiosken venter på skrivebordet og ca. 5 sek. mere, før Chromium åbner.
+  Ses den stadig ikke, så send loggen og outputtet af `echo $XDG_SESSION_TYPE; cat /proc/device-tree/model`.
 - Gemte valg: `~/.local/state/kiosk/state.json` (slet for at nulstille)
 - Fjern det hele igen: `~/kiosk/uninstall.sh`
 - Ny version: `git pull && ./install.sh` (ingen grund til at afinstallere først)
